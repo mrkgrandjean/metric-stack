@@ -16,12 +16,15 @@ services:
 
   aggregator:
     image: ghcr.io/mrkgrandjean/aggregator:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    ports:
+      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -36,6 +39,22 @@ services:
       - aggregator
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-run.dead-mans-switch.schedule: "@daily"
+      ofelia.job-run.dead-mans-switch.image: "metric-stack-dead-mans-switch"
+      ofelia.job-run.dead-mans-switch.network: "metric-stack"
+      ofelia.job-run.dead-mans-switch.environment: >-
+        ["POSTGRES_HOST=postgres", "POSTGRES_DB=${POSTGRES_DB}",
+        "POSTGRES_USER=${POSTGRES_USER}", "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}",
+        "NTFY_TOPIC=${NTFY_TOPIC}", "NTFY_URL=${NTFY_URL}",
+        "DEAD_MANS_SWITCH_GRACE_MINUTES=${DEAD_MANS_SWITCH_GRACE_MINUTES:-30}"]
+      ofelia.job-run.xbox-time-collector.schedule: "@every 1m"
+      ofelia.job-run.xbox-time-collector.image: "ghcr.io/mrkgrandjean/xbox-time:latest"
+      ofelia.job-run.xbox-time-collector.network: "metric-stack"
+      ofelia.job-run.xbox-time-collector.environment: >-
+        ["AGGREGATOR_URL=http://aggregator:8000", "OPENXBL_API_KEY=${OPENXBL_API_KEY}",
+        "XBOX_TIME_XUID=${XBOX_TIME_XUID:-}"]
 
   grafana:
     image: grafana/grafana
@@ -50,33 +69,32 @@ services:
       - grafana-data:/var/lib/grafana
       - ./dashboards/grafana/provisioning:/etc/grafana/provisioning
 
-  dead-mans-switch:
-    build:
-      context: ./scripts
-      dockerfile: dead_mans_switch.Dockerfile
-    depends_on:
-      - postgres
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      NTFY_TOPIC: ${NTFY_TOPIC}
-      NTFY_URL: ${NTFY_URL}
-      DEAD_MANS_SWITCH_GRACE_MINUTES: ${DEAD_MANS_SWITCH_GRACE_MINUTES:-30}
-    labels:
-      ofelia.enabled: "true"
-      ofelia.job-run.dead-mans-switch.schedule: "@daily"
-      ofelia.job-run.dead-mans-switch.image: "metric-stack-dead-mans-switch"
+  # dead-mans-switch:
+  #   build:
+  #     context: ./scripts
+  #     dockerfile: dead_mans_switch.Dockerfile
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     NTFY_TOPIC: ${NTFY_TOPIC}
+  #     NTFY_URL: ${NTFY_URL}
+  #     DEAD_MANS_SWITCH_GRACE_MINUTES: ${DEAD_MANS_SWITCH_GRACE_MINUTES:-30}
 
-  xbox-time-collector:
-    image: ghcr.io/mrkgrandjean/xbox-time-collector:latest
-    labels:
-      ofelia.enabled: "true"
-      ofelia.job-run.xbox-time-collector.schedule: "@every 5m"
-      ofelia.job-run.xbox-time-collector.image: "ghcr.io/mrkgrandjean/xbox-time-collector:latest"
-    environment:
-      - AGGREGATOR_URL=http://aggregator:8000
+  # xbox-time-collector:
+  #   image: ghcr.io/mrkgrandjean/xbox-time:latest
+  #   pull_policy: always
+  #   environment:
+  #     - AGGREGATOR_URL=http://aggregator:8000
+  #     - OPENXBL_API_KEY=${OPENXBL_API_KEY}
+  #     - XBOX_TIME_XUID=${XBOX_TIME_XUID:-}
+
+networks:
+  default:
+    name: metric-stack
 
 volumes:
   postgres-data:
