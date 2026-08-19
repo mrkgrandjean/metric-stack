@@ -32,4 +32,15 @@ for var in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do
   fi
 done
 
+echo "== postgres datasource sets database inside jsonData (root-level 'database' is ignored for queries since Grafana 12.2, grafana/grafana#112418) =="
+if ! awk '
+  /^    jsonData:/ { f=1; next }
+  f && /^      / { if ($0 ~ /database:/) found=1; next }
+  f { f=0 }
+  END { exit !found }
+' dashboards/grafana/provisioning/datasources/postgres.yml; then
+  echo "MISSING database under jsonData in dashboards/grafana/provisioning/datasources/postgres.yml"
+  exit 1
+fi
+
 echo "All checks passed."
