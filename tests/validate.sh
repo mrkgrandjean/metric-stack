@@ -24,4 +24,12 @@ if [ "$missing" -ne 0 ]; then
   exit 1
 fi
 
+echo "== grafana service passes through the postgres credentials the datasource needs =="
+for var in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do
+  if ! docker compose config | awk '/^  grafana:/{f=1} f && /^  [a-z-]+:$/ && !/^  grafana:/{exit} f' | grep -q "${var}:"; then
+    echo "MISSING from grafana service environment: ${var}"
+    exit 1
+  fi
+done
+
 echo "All checks passed."
