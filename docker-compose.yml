@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  aggregator:
+    image: ghcr.io/mrkgrandjean/aggregator:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ofelia:
+    image: mcuadros/ofelia:latest
+    restart: unless-stopped
+    command: daemon --docker
+    depends_on:
+      - aggregator
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./dashboards/grafana/provisioning:/etc/grafana/provisioning
+
+  dead-mans-switch:
+    build:
+      context: ./scripts
+      dockerfile: dead_mans_switch.Dockerfile
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      NTFY_TOPIC: ${NTFY_TOPIC}
+      NTFY_URL: ${NTFY_URL}
+      DEAD_MANS_SWITCH_GRACE_MINUTES: ${DEAD_MANS_SWITCH_GRACE_MINUTES:-30}
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-run.dead-mans-switch.schedule: "@daily"
+      ofelia.job-run.dead-mans-switch.image: "metric-stack-dead-mans-switch"
+
+  xbox-time-collector:
+    image: ghcr.io/mrkgrandjean/xbox-time-collector:latest
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-run.xbox-time-collector.schedule: "@every 5m"
+      ofelia.job-run.xbox-time-collector.image: "ghcr.io/mrkgrandjean/xbox-time-collector:latest"
+    environment:
+      - AGGREGATOR_URL=http://aggregator:8000
+
+volumes:
+  postgres-data:
+  grafana-data:

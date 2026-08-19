@@ -1,0 +1,44 @@
+{
+  "title": "Metrics Overview",
+  "uid": "metrics-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Metrics by name",
+      "type": "timeseries",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "Postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT recorded_at AS \"time\", metric_name, value FROM metrics WHERE $__timeFilter(recorded_at) ORDER BY recorded_at",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Collector runs health",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "Postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (collector_name) collector_name, status, started_at, finished_at, expected_interval_minutes FROM collector_runs ORDER BY collector_name, started_at DESC",
+          "rawQuery": true
+        }
+      ]
+    }
+  ]
+}
