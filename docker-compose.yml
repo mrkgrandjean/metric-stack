@@ -34,7 +34,17 @@ services:
   ofelia:
     image: mcuadros/ofelia:latest
     restart: unless-stopped
-    command: daemon --docker
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /root/.docker &&
+        auth=$$(printf '%s:%s' "$$GHCR_USERNAME" "$$GHCR_TOKEN" | base64 | tr -d '\n') &&
+        printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$$auth" > /root/.docker/config.json &&
+        exec /usr/bin/ofelia daemon --docker
+    environment:
+      HOME: /root
+      GHCR_USERNAME: ${GHCR_USERNAME}
+      GHCR_TOKEN: ${GHCR_TOKEN}
     depends_on:
       - aggregator
     volumes:
@@ -55,6 +65,11 @@ services:
       ofelia.job-run.xbox-time-collector.environment: >-
         ["AGGREGATOR_URL=http://aggregator:8000", "OPENXBL_API_KEY=${OPENXBL_API_KEY}",
         "XBOX_TIME_XUID=${XBOX_TIME_XUID:-}"]
+      ofelia.job-run.completed-tasks-collector.schedule: "@every 1m"
+      ofelia.job-run.completed-tasks-collector.image: "ghcr.io/mrkgrandjean/completed-tasks:latest"
+      ofelia.job-run.completed-tasks-collector.network: "metric-stack"
+      ofelia.job-run.completed-tasks-collector.environment: >-
+        ["AGGREGATOR_URL=http://aggregator:8000", "TODOIST_API_TOKEN=${TODOIST_API_TOKEN}"]
 
   grafana:
     image: grafana/grafana
